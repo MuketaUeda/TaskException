@@ -797,6 +797,33 @@ class TestSplitData:
         combined_indices = train_indices | test_indices
         assert combined_indices == original_indices, \
             "All original indices should appear in train or test"
+    
+    def test_verbose_parameter(self, sample_X, sample_y_balanced, capsys):
+        """Test that verbose parameter controls output"""
+        # Test with verbose=False (should not print)
+        split_data(sample_X, sample_y_balanced, verbose=False)
+        output_with_false = capsys.readouterr().out
+        
+        # Test with verbose=True (should print)
+        split_data(sample_X, sample_y_balanced, verbose=True)
+        output_with_true = capsys.readouterr().out
+        
+        # Output with verbose=True should be longer
+        assert len(output_with_true) > len(output_with_false), \
+            "Verbose=True should produce more output than verbose=False"
+    
+    def test_verbose_uses_global_when_none(self, sample_X, sample_y_balanced, capsys, monkeypatch):
+        """Test that verbose uses global VERBOSE when None"""
+        # Set global VERBOSE to False
+        import src.modeling as modeling
+        monkeypatch.setattr(modeling, 'VERBOSE', False)
+        
+        split_data(sample_X, sample_y_balanced, verbose=None)
+        output = capsys.readouterr().out
+        
+        # Should not print when VERBOSE=False
+        assert len(output) == 0 or "STEP 4" not in output, \
+            "Should not print when VERBOSE=False and verbose=None"
 
 
 # ============================================================================
@@ -848,8 +875,35 @@ class TestEvaluateModel:
     @pytest.fixture
     def trained_model(self, X_train, y_train, X_test, y_test):
         """Fixture: Trained XGBoost model"""
-        model, _ = train_xgboost(X_train, y_train, X_test, y_test, focus_precision=False)
+        model, _ = train_xgboost(X_train, y_train, X_test, y_test, focus_precision=False, verbose=False)
         return model
+    
+    def test_train_xgboost_verbose_parameter(self, X_train, y_train, X_test, y_test, capsys):
+        """Test that verbose parameter controls output in train_xgboost"""
+        # Test with verbose=False (should not print)
+        train_xgboost(X_train, y_train, X_test, y_test, focus_precision=False, verbose=False)
+        output_with_false = capsys.readouterr().out
+        
+        # Test with verbose=True (should print)
+        train_xgboost(X_train, y_train, X_test, y_test, focus_precision=False, verbose=True)
+        output_with_true = capsys.readouterr().out
+        
+        # Output with verbose=True should be longer
+        assert len(output_with_true) > len(output_with_false), \
+            "Verbose=True should produce more output than verbose=False"
+    
+    def test_train_xgboost_verbose_uses_global_when_none(self, X_train, y_train, X_test, y_test, capsys, monkeypatch):
+        """Test that verbose uses global VERBOSE when None in train_xgboost"""
+        # Set global VERBOSE to False
+        import src.modeling as modeling
+        monkeypatch.setattr(modeling, 'VERBOSE', False)
+        
+        train_xgboost(X_train, y_train, X_test, y_test, focus_precision=False, verbose=None)
+        output = capsys.readouterr().out
+        
+        # Should not print when VERBOSE=False
+        assert len(output) == 0 or "STEP 5" not in output, \
+            "Should not print when VERBOSE=False and verbose=None"
     
     def test_returns_dict(self, trained_model, X_train, y_train, X_test, y_test):
         """Test that function returns dictionary"""
@@ -907,6 +961,33 @@ class TestEvaluateModel:
         
         assert metrics['threshold'] == custom_threshold, \
             f"Threshold should be {custom_threshold}, got {metrics['threshold']}"
+    
+    def test_verbose_parameter(self, trained_model, X_train, y_train, X_test, y_test, capsys):
+        """Test that verbose parameter controls output"""
+        # Test with verbose=False (should not print)
+        evaluate_model(trained_model, X_train, y_train, X_test, y_test, verbose=False)
+        output_with_false = capsys.readouterr().out
+        
+        # Test with verbose=True (should print)
+        evaluate_model(trained_model, X_train, y_train, X_test, y_test, verbose=True)
+        output_with_true = capsys.readouterr().out
+        
+        # Output with verbose=True should be longer
+        assert len(output_with_true) > len(output_with_false), \
+            "Verbose=True should produce more output than verbose=False"
+    
+    def test_verbose_uses_global_when_none(self, trained_model, X_train, y_train, X_test, y_test, capsys, monkeypatch):
+        """Test that verbose uses global VERBOSE when None"""
+        # Set global VERBOSE to False
+        import src.modeling as modeling
+        monkeypatch.setattr(modeling, 'VERBOSE', False)
+        
+        evaluate_model(trained_model, X_train, y_train, X_test, y_test, verbose=None)
+        output = capsys.readouterr().out
+        
+        # Should not print when VERBOSE=False
+        assert len(output) == 0 or "STEP 6" not in output, \
+            "Should not print when VERBOSE=False and verbose=None"
 
 
 # ============================================================================
@@ -958,7 +1039,7 @@ class TestGetFeatureImportance:
     @pytest.fixture
     def trained_model(self, X_train, y_train, X_test, y_test):
         """Fixture: Trained XGBoost model"""
-        model, _ = train_xgboost(X_train, y_train, X_test, y_test, focus_precision=False)
+        model, _ = train_xgboost(X_train, y_train, X_test, y_test, focus_precision=False, verbose=False)
         return model
     
     def test_returns_dataframe(self, trained_model, X_train):

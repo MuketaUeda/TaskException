@@ -286,10 +286,23 @@ def split_data(X, y, test_size=0.05, random_state=42, verbose=None):
         y: Target
         test_size: Proporção para teste (default 0.05 = 5%)
         random_state: Seed para reprodutibilidade
+        verbose: Se True, mostra informações do split (default: None, usa VERBOSE global)
         
     Returns:
         X_train, X_test, y_train, y_test
     """
+    # Use global VERBOSE if verbose is None
+    if verbose is None:
+        verbose = VERBOSE
+    
+    if verbose:
+        print("="*80)
+        print("STEP 4: Splitting data into train and test sets")
+        print("="*80)
+        print(f"Original dataset shape: {X.shape}")
+        print(f"Test size: {test_size*100:.1f}%")
+        print(f"Random state: {random_state}")
+    
     nan_mask = y.isna()
     nan_count = nan_mask.sum()
 
@@ -297,6 +310,9 @@ def split_data(X, y, test_size=0.05, random_state=42, verbose=None):
         valid_mask = ~nan_mask
         X = X[valid_mask].copy()
         y = y[valid_mask].copy()
+        if verbose:
+            print(f"\n⚠ Removed {nan_count} rows with NaN in target")
+            print(f"Dataset shape after removing NaN: {X.shape}")
     
     unique_classes = y.value_counts()
     n_classes = len(unique_classes)
@@ -319,10 +335,40 @@ def split_data(X, y, test_size=0.05, random_state=42, verbose=None):
             random_state=random_state
         )
     
+    if verbose:
+        print(f"\nSplit completed:")
+        print(f"  Training set: {X_train.shape[0]} samples ({X_train.shape[0]/(X_train.shape[0]+X_test.shape[0])*100:.1f}%)")
+        print(f"  Test set: {X_test.shape[0]} samples ({X_test.shape[0]/(X_train.shape[0]+X_test.shape[0])*100:.1f}%)")
+        print(f"  Features: {X_train.shape[1]} columns")
+        
+        # Mostrar distribuição de classes
+        print(f"\nClass distribution:")
+        train_class_counts = pd.Series(y_train).value_counts().sort_index()
+        test_class_counts = pd.Series(y_test).value_counts().sort_index()
+        
+        print(f"  Training set:")
+        for class_val, count in train_class_counts.items():
+            percentage = (count / len(y_train)) * 100
+            label = 'GOOD (0)' if class_val == 0 else 'RED (1)' if class_val == 1 else f'Class {class_val}'
+            print(f"    - {label}: {count} ({percentage:.2f}%)")
+        
+        print(f"  Test set:")
+        for class_val, count in test_class_counts.items():
+            percentage = (count / len(y_test)) * 100
+            label = 'GOOD (0)' if class_val == 0 else 'RED (1)' if class_val == 1 else f'Class {class_val}'
+            print(f"    - {label}: {count} ({percentage:.2f}%)")
+        
+        if use_stratify:
+            print(f"\n✓ Stratified split: Class proportions maintained")
+        else:
+            print(f"\n⚠ Non-stratified split: Class proportions may vary")
+        
+        print()
+    
     return X_train, X_test, y_train, y_test
 
 
-def train_xgboost(X_train, y_train, X_test, y_test, focus_precision=True):
+def train_xgboost(X_train, y_train, X_test, y_test, focus_precision=True, verbose=None):
     """
     Treina modelo XGBoost focando em precisão.
     
@@ -332,10 +378,22 @@ def train_xgboost(X_train, y_train, X_test, y_test, focus_precision=True):
         X_train, y_train: Dados de treino
         X_test, y_test: Dados de teste (para early stopping)
         focus_precision: Se True, ajusta para maximizar precisão
+        verbose: Se True, mostra informações do treinamento (default: None, usa VERBOSE global)
         
     Returns:
         Modelo treinado e histórico de treinamento
     """
+    # Use global VERBOSE if verbose is None
+    if verbose is None:
+        verbose = VERBOSE
+    
+    if verbose:
+        print("="*80)
+        print("STEP 5: Training XGBoost model")
+        print("="*80)
+        print(f"Training set: {X_train.shape[0]} samples, {X_train.shape[1]} features")
+        print(f"Test set: {X_test.shape[0]} samples (for early stopping)")
+        print(f"Focus on precision: {focus_precision}")
     # Verificar se há NaN no target
     if y_train.isna().any() or y_test.isna().any():
         raise ValueError("Target (y) should not contain NaN values. Use split_data to remove them first.")
@@ -365,8 +423,16 @@ def train_xgboost(X_train, y_train, X_test, y_test, focus_precision=True):
         negative_class_count = class_counts.iloc[0]  # Classe 0 (GOOD)
         positive_class_count = class_counts.iloc[1]  # Classe 1 (RED)
         scale_pos_weight = negative_class_count / positive_class_count if positive_class_count > 0 else 1.0
+        if verbose:
+            print(f"\nClass distribution in training set:")
+            print(f"  - GOOD (0): {negative_class_count} ({negative_class_count/len(y_train_array)*100:.2f}%)")
+            print(f"  - RED (1): {positive_class_count} ({positive_class_count/len(y_train_array)*100:.2f}%)")
+            print(f"  - Scale pos weight: {scale_pos_weight:.3f}")
     else:
         scale_pos_weight = 1.0
+        if verbose:
+            print(f"\nClass distribution: {dict(class_counts)}")
+            print(f"  - Scale pos weight: {scale_pos_weight:.3f} (balanced)")
     
     # Configurar hiperparâmetros base
     params = {
@@ -390,13 +456,23 @@ def train_xgboost(X_train, y_train, X_test, y_test, focus_precision=True):
     # Ajustar parâmetros se focus_precision=True (mais conservador = melhor precisão)
     if focus_precision:
         params.update({
-            'min_child_weight': 7,  # Aumentado de 5 para 7 (mais conservador)
-            'gamma': 0.3,  # Aumentado de 0.2 para 0.3 (mais conservador)
-            'max_depth': 4,  # Reduzido de 5 para 4 (menos overfitting)
-            'learning_rate': 0.03,  # Reduzido de 0.05 para 0.03 (mais cuidadoso)
+            'min_child_weight': 7,  # Aumentado de 3 para 7 (mais conservador)
+            'gamma': 0.3,  # Aumentado de 0.1 para 0.3 (mais conservador)
+            'max_depth': 4,  # Reduzido de 6 para 4 (menos overfitting)
+            'learning_rate': 0.03,  # Reduzido de 0.1 para 0.03 (mais cuidadoso)
             'reg_alpha': 0.2,  # Aumentada regularização L1
             'reg_lambda': 2.0,  # Aumentada regularização L2
         })
+    
+    if verbose:
+        print(f"\nHyperparameters:")
+        key_params = ['max_depth', 'learning_rate', 'n_estimators', 'min_child_weight', 
+                     'gamma', 'reg_alpha', 'reg_lambda', 'subsample', 'colsample_bytree']
+        for key in key_params:
+            if key in params:
+                print(f"  - {key}: {params[key]}")
+        print(f"  - early_stopping_rounds: 50")
+        print(f"\nStarting training...")
     
     # Criar DMatrix (formato otimizado do XGBoost)
     dtrain = xgb.DMatrix(X_train_array, label=y_train_array, feature_names=feature_names)
@@ -406,6 +482,9 @@ def train_xgboost(X_train, y_train, X_test, y_test, focus_precision=True):
     evallist = [(dtrain, 'train'), (dtest, 'test')]
     
     # Treinar modelo com early stopping
+    if verbose:
+        print("  (Training in progress, this may take a few minutes...)")
+    
     model = xgb.train(
         params,
         dtrain,
@@ -415,9 +494,17 @@ def train_xgboost(X_train, y_train, X_test, y_test, focus_precision=True):
         verbose_eval=False
     )
     
+    if verbose:
+        print(f"\n✓ Training completed!")
+        print(f"  - Best iteration: {model.best_iteration}")
+        print(f"  - Best score (logloss): {model.best_score:.6f}")
+    
     # Se focus_precision=True, encontrar melhor threshold para maximizar precisão
     optimal_threshold = 0.5
     if focus_precision:
+        if verbose:
+            print(f"\nOptimizing threshold for maximum precision...")
+        
         # Obter probabilidades do conjunto de validação
         y_pred_proba = model.predict(dtest)
         
@@ -448,6 +535,20 @@ def train_xgboost(X_train, y_train, X_test, y_test, focus_precision=True):
                         best_threshold = threshold
         
         optimal_threshold = best_threshold
+        
+        if verbose:
+            print(f"  - Optimal threshold: {optimal_threshold:.3f}")
+            print(f"  - Precision at optimal threshold: {best_precision:.3f} ({best_precision*100:.1f}%)")
+            if best_precision > 0.5:
+                print(f"  ✓ Requirement met: Precision > 50%")
+            else:
+                print(f"  ⚠ Warning: Precision ({best_precision*100:.1f}%) is below 50% requirement")
+    else:
+        if verbose:
+            print(f"\nUsing default threshold: 0.5")
+    
+    if verbose:
+        print()
     
     # Capturar histórico de treinamento
     training_history = {
@@ -461,7 +562,7 @@ def train_xgboost(X_train, y_train, X_test, y_test, focus_precision=True):
     return model, training_history
 
 
-def evaluate_model(model, X_train, y_train, X_test, y_test, threshold=None):
+def evaluate_model(model, X_train, y_train, X_test, y_test, threshold=None, verbose=None):
     """
     Avalia o modelo calculando métricas de performance.
     
@@ -477,12 +578,23 @@ def evaluate_model(model, X_train, y_train, X_test, y_test, threshold=None):
         X_train, y_train: Dados de treino
         X_test, y_test: Dados de teste
         threshold: Threshold para classificação binária (default: 0.5)
+        verbose: Se True, mostra métricas calculadas (default: None, usa VERBOSE global)
         
     Returns:
         Dict com métricas de treino e teste
     """
+    # Use global VERBOSE if verbose is None
+    if verbose is None:
+        verbose = VERBOSE
+    
     if threshold is None:
         threshold = 0.5
+    
+    if verbose:
+        print("="*80)
+        print("STEP 6: Evaluating model performance")
+        print("="*80)
+        print(f"Classification threshold: {threshold}")
     
     # Converter para arrays se necessário
     if isinstance(X_train, pd.DataFrame):
@@ -538,6 +650,41 @@ def evaluate_model(model, X_train, y_train, X_test, y_test, threshold=None):
         },
         'threshold': threshold
     }
+    
+    if verbose:
+        print(f"\nTraining Set Metrics:")
+        print(f"  - Accuracy:  {train_accuracy:.4f} ({train_accuracy*100:.2f}%)")
+        print(f"  - Precision: {train_precision:.4f} ({train_precision*100:.2f}%)")
+        print(f"  - Recall:    {train_recall:.4f} ({train_recall*100:.2f}%)")
+        
+        print(f"\nTest Set Metrics:")
+        print(f"  - Accuracy:  {test_accuracy:.4f} ({test_accuracy*100:.2f}%)")
+        print(f"  - Precision: {test_precision:.4f} ({test_precision*100:.2f}%)")
+        print(f"  - Recall:    {test_recall:.4f} ({test_recall*100:.2f}%)")
+        
+        # Verificar requisito do case
+        print(f"\nCase Requirement Check:")
+        if test_precision > 0.5:
+            print(f"  ✓ Precision ({test_precision*100:.2f}%) > 50% - REQUIREMENT MET")
+        else:
+            print(f"  ✗ Precision ({test_precision*100:.2f}%) ≤ 50% - REQUIREMENT NOT MET")
+        
+        # Calcular diferenças (overfitting indicator)
+        accuracy_diff = train_accuracy - test_accuracy
+        precision_diff = train_precision - test_precision
+        recall_diff = train_recall - test_recall
+        
+        print(f"\nTrain vs Test Differences (overfitting indicator):")
+        print(f"  - Accuracy gap:  {accuracy_diff:+.4f} ({accuracy_diff*100:+.2f}%)")
+        print(f"  - Precision gap: {precision_diff:+.4f} ({precision_diff*100:+.2f}%)")
+        print(f"  - Recall gap:    {recall_diff:+.4f} ({recall_diff*100:+.2f}%)")
+        
+        if abs(accuracy_diff) > 0.1 or abs(precision_diff) > 0.1 or abs(recall_diff) > 0.1:
+            print(f"  ⚠ Warning: Large gap (>10%) may indicate overfitting")
+        else:
+            print(f"  ✓ Good generalization: Small gap between train and test")
+        
+        print()
     
     return metrics
 
