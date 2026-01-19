@@ -669,3 +669,41 @@ def check_overfitting(metrics):
     }
     
     return overfitting_info
+
+
+def save_processed_data(df, output_path='data/processed/cleaned_data.csv', verbose=None):
+    """
+    Salva dados processados em arquivo CSV.
+    
+    Útil para evitar reprocessar dados grandes toda vez que rodar o notebook.
+    
+    Args:
+        df: DataFrame processado
+        output_path: Caminho para salvar (default: 'data/processed/cleaned_data.csv')
+        verbose: Se True, mostra mensagens (default: None, usa VERBOSE global)
+        
+    Returns:
+        Caminho do arquivo salvo
+    """
+    import os
+    
+    if verbose is None:
+        verbose = VERBOSE
+    
+    # Criar diretório se não existir
+    output_dir = os.path.dirname(output_path)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+        if verbose:
+            print(f"Created directory: {output_dir}")
+    
+    # Salvar CSV (usar mesmo separador do arquivo original: ';')
+    df.to_csv(output_path, index=False, sep=';')
+    
+    if verbose:
+        print(f"✓ Dados processados salvos em: {output_path}")
+        print(f"  Shape: {df.shape}")
+        file_size = os.path.getsize(output_path) / (1024 * 1024)  # MB
+        print(f"  Tamanho do arquivo: {file_size:.2f} MB")
+    
+    return output_path
