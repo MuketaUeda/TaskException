@@ -32,7 +32,7 @@ class TestLoadAndPrepareData:
     @pytest.fixture
     def raw_df(self, csv_path):
         """Load raw CSV without cleaning"""
-        return pd.read_csv(csv_path, sep=';')
+        return pd.read_csv(csv_path, sep=';', low_memory=False)
     
     @pytest.fixture
     def cleaned_df(self, csv_path):
