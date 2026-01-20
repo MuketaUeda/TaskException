@@ -62,11 +62,11 @@ dmypy.json
 .env
 .env.local
 
-# Data files (opcional - descomente se não quiser commitar dados)
+# Data files
 # data/raw/
 # data/processed/
 
-# Model files (opcional - descomente se não quiser commitar modelos salvos)
+# Model files
 # models/
 # *.pkl
 # *.joblib

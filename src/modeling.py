@@ -1,11 +1,8 @@
-from typing import Any
-
-
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, recall_score, precision_score
+from sklearn.metrics import accuracy_score, recall_score, precision_score
 import xgboost as xgb
 try:
     # Try relative import first (when used as package)
@@ -22,22 +19,17 @@ VERBOSE = True  # Set to False to disable all prints globally
 
 def load_and_prepare_data(csv_path='data/raw/Task_Exception Prediction_Training Test Data.csv', verbose=None):
     """
-    Carrega o CSV e aplica os transformers de limpeza.
+    Loads CSV and applies cleaning transformers.
     
     Args:
-        csv_path: Caminho para o arquivo CSV
+        csv_path: Path to CSV file
         
     Returns:
-        DataFrame limpo e preparado
+        Cleaned and prepared DataFrame
     """
     # Use global VERBOSE if verbose is None
     if verbose is None:
         verbose = VERBOSE
-    
-    if verbose:
-        print("="*80)
-        print("STEP 1: Loading and cleaning data")
-        print("="*80)
     
     df = pd.read_csv(csv_path, sep=';', dtype=str)
     
@@ -87,21 +79,16 @@ def load_and_prepare_data(csv_path='data/raw/Task_Exception Prediction_Training 
 
 def encode_categorical_features(df, verbose=None):
     """
-    Aplica Label Encoding nas variáveis categóricas.
+    Applies Label Encoding to categorical variables.
     
     Args:
-        df: DataFrame com dados limpos
+        df: DataFrame with cleaned data
         
     Returns:
-        DataFrame com categóricas encodadas e dict de encoders para referência
+        DataFrame with encoded categoricals and dict of encoders for reference
     """
     if verbose is None:
         verbose = VERBOSE
-    
-    if verbose:
-        print("="*80)
-        print("STEP 2: Encoding categorical features")
-        print("="*80)
     
     df_encoded = df.copy()
 
@@ -159,14 +146,14 @@ def encode_categorical_features(df, verbose=None):
 
 def prepare_features_and_target(df, verbose=None):
     """
-    Separa features (X) e target (y).
+    Separates features (X) and target (y).
     
     Target: Exception_output
-    - "RED" = 1 (exceção ocorreu)
-    - "GOOD" = 0 (sem exceção)
+    - "RED" = 1 (exception occurred)
+    - "GOOD" = 0 (no exception)
     
     Args:
-        df: DataFrame com dados encodados
+        df: DataFrame with encoded data
         
     Returns:
         X (features), y (target)
@@ -174,21 +161,16 @@ def prepare_features_and_target(df, verbose=None):
     if verbose is None:
         verbose = VERBOSE
     
-    if verbose:
-        print("="*80)
-        print("STEP 3: Preparing features and target")
-        print("="*80)
-    
-    # Verificar se coluna target existe
+    # Check if target column exists
     target_column = 'Exception_output'
     if target_column not in df.columns:
         raise ValueError(f"Target column '{target_column}' not found in DataFrame")
     
     if verbose:
         print(f"Target column: {target_column}")
-        print(f"Total features (columns): {len(df.columns)}")
+        print(f"Total columns in dataset: {len(df.columns)} (including target)")
     
-    # Separar target (y)
+    # Separate target (y)
     y = df[target_column].copy()
     
     if verbose:
@@ -198,22 +180,22 @@ def prepare_features_and_target(df, verbose=None):
             percentage = (count / len(y)) * 100
             print(f"  - {value}: {count} ({percentage:.2f}%)")
     
-    # Converter target de string para binário
-    # 'red' ou 'RED' → 1 (exceção ocorreu)
-    # 'good' ou 'GOOD' → 0 (sem exceção)
+    # Convert target from string to binary
+    # 'red' or 'RED' → 1 (exception occurred)
+    # 'good' or 'GOOD' → 0 (no exception)
     y_str = y.astype(str).str.lower().str.strip()
     
-    # Usar map para evitar FutureWarning de replace
-    # map() retorna NaN automaticamente para valores não mapeados
+    # Use map to avoid FutureWarning from replace
+    # map() automatically returns NaN for unmapped values
     y_binary = y_str.map({'red': 1, 'good': 0})
     
-    # Verificar se há valores inválidos (não 'red' nem 'good')
-    # map() já converte valores não mapeados para NaN, então verificamos os NaN
-    # que foram criados por valores não mapeados
-    nan_from_invalid = y_binary.isna() & y_str.notna()  # NaN no resultado mas não no original
+    # Check if there are invalid values (not 'red' nor 'good')
+    # map() already converts unmapped values to NaN, so we check the NaN
+    # that were created by unmapped values
+    nan_from_invalid = y_binary.isna() & y_str.notna()  # NaN in result but not in original
     
     if nan_from_invalid.any():
-        # Valores originais que foram convertidos para NaN (invalidos)
+        # Original values that were converted to NaN (invalid)
         invalid_original_values = y_str[nan_from_invalid].unique()
         
         if verbose:
@@ -226,8 +208,8 @@ def prepare_features_and_target(df, verbose=None):
             nan_count = y_binary.isna().sum()
             print(f"  → Converted {nan_count} invalid values to NaN")
     
-    # Converter para int (mantendo NaN como NaN)
-    y = y_binary.astype('Int64')  # Int64 do pandas permite NaN
+    # Convert to int (keeping NaN as NaN)
+    y = y_binary.astype('Int64')  # pandas Int64 allows NaN
     
     if verbose:
         print(f"\nTarget after encoding:")
@@ -246,7 +228,7 @@ def prepare_features_and_target(df, verbose=None):
         print(f"  - Columns: {X.shape[1]}")
         print(f"  - Data types: {X.dtypes.value_counts().to_dict()}")
         
-        # Verificar se há NaN em features
+        # Check if there are NaN in features
         nan_counts = X.isna().sum()
         cols_with_nan = nan_counts[nan_counts > 0]
         if len(cols_with_nan) > 0:
@@ -277,16 +259,16 @@ def prepare_features_and_target(df, verbose=None):
 
 def split_data(X, y, test_size=0.05, random_state=42, verbose=None):
     """
-    Divide dados em treino e teste.
+    Splits data into training and test sets.
     
-    Requisito do case: 5% para teste, mantendo proporção das classes (stratified).
+    Case requirement: 5% for test, maintaining class proportions (stratified).
     
     Args:
         X: Features
         y: Target
-        test_size: Proporção para teste (default 0.05 = 5%)
-        random_state: Seed para reprodutibilidade
-        verbose: Se True, mostra informações do split (default: None, usa VERBOSE global)
+        test_size: Proportion for test (default 0.05 = 5%)
+        random_state: Seed for reproducibility
+        verbose: If True, shows split information (default: None, uses global VERBOSE)
         
     Returns:
         X_train, X_test, y_train, y_test
@@ -296,9 +278,6 @@ def split_data(X, y, test_size=0.05, random_state=42, verbose=None):
         verbose = VERBOSE
     
     if verbose:
-        print("="*80)
-        print("STEP 4: Splitting data into train and test sets")
-        print("="*80)
         print(f"Original dataset shape: {X.shape}")
         print(f"Test size: {test_size*100:.1f}%")
         print(f"Random state: {random_state}")
@@ -341,7 +320,7 @@ def split_data(X, y, test_size=0.05, random_state=42, verbose=None):
         print(f"  Test set: {X_test.shape[0]} samples ({X_test.shape[0]/(X_train.shape[0]+X_test.shape[0])*100:.1f}%)")
         print(f"  Features: {X_train.shape[1]} columns")
         
-        # Mostrar distribuição de classes
+        # Show class distribution
         print(f"\nClass distribution:")
         train_class_counts = pd.Series(y_train).value_counts().sort_index()
         test_class_counts = pd.Series(y_test).value_counts().sort_index()
@@ -370,18 +349,18 @@ def split_data(X, y, test_size=0.05, random_state=42, verbose=None):
 
 def train_xgboost(X_train, y_train, X_test, y_test, focus_precision=True, verbose=None):
     """
-    Treina modelo XGBoost focando em precisão.
+    Trains XGBoost model focusing on precision.
     
-    Requisito do case: Precisão >50% (priorizar precisão sobre recall).
+    Case requirement: Precision >50% (prioritize precision over recall).
     
     Args:
-        X_train, y_train: Dados de treino
-        X_test, y_test: Dados de teste (para early stopping)
-        focus_precision: Se True, ajusta para maximizar precisão
-        verbose: Se True, mostra informações do treinamento (default: None, usa VERBOSE global)
+        X_train, y_train: Training data
+        X_test, y_test: Test data (for early stopping)
+        focus_precision: If True, adjusts to maximize precision
+        verbose: If True, shows training information (default: None, uses global VERBOSE)
         
     Returns:
-        Modelo treinado e histórico de treinamento
+        Trained model and training history
     """
     # Use global VERBOSE if verbose is None
     if verbose is None:
@@ -394,15 +373,15 @@ def train_xgboost(X_train, y_train, X_test, y_test, focus_precision=True, verbos
         print(f"Training set: {X_train.shape[0]} samples, {X_train.shape[1]} features")
         print(f"Test set: {X_test.shape[0]} samples (for early stopping)")
         print(f"Focus on precision: {focus_precision}")
-    # Verificar se há NaN no target
+    # Check if there are NaN in target
     if y_train.isna().any() or y_test.isna().any():
         raise ValueError("Target (y) should not contain NaN values. Use split_data to remove them first.")
     
-    # Converter para numpy arrays se necessário (XGBoost aceita ambos)
+    # Convert to numpy arrays if necessary (XGBoost accepts both)
     if isinstance(X_train, pd.DataFrame):
         X_train_array = X_train.values
         X_test_array = X_test.values
-        # Limpar nomes das features (XGBoost não aceita [, ], <, etc)
+        # Clean feature names (XGBoost doesn't accept [, ], <, etc)
         feature_names = [str(col).replace('[', '_').replace(']', '_').replace('<', '_').replace('>', '_') 
                         for col in X_train.columns]
     else:
@@ -417,11 +396,11 @@ def train_xgboost(X_train, y_train, X_test, y_test, focus_precision=True, verbos
         y_train_array = y_train
         y_test_array = y_test
     
-    # Calcular proporção de classes para scale_pos_weight (se desbalanceado)
+    # Calculate class proportion for scale_pos_weight (if imbalanced)
     class_counts = pd.Series(y_train_array).value_counts().sort_index()
     if len(class_counts) == 2:
-        negative_class_count = class_counts.iloc[0]  # Classe 0 (GOOD)
-        positive_class_count = class_counts.iloc[1]  # Classe 1 (RED)
+        negative_class_count = class_counts.iloc[0]  # Class 0 (GOOD)
+        positive_class_count = class_counts.iloc[1]  # Class 1 (RED)
         scale_pos_weight = negative_class_count / positive_class_count if positive_class_count > 0 else 1.0
         if verbose:
             print(f"\nClass distribution in training set:")
@@ -434,7 +413,7 @@ def train_xgboost(X_train, y_train, X_test, y_test, focus_precision=True, verbos
             print(f"\nClass distribution: {dict(class_counts)}")
             print(f"  - Scale pos weight: {scale_pos_weight:.3f} (balanced)")
     
-    # Configurar hiperparâmetros base
+    # Configure base hyperparameters
     params = {
         'objective': 'binary:logistic',
         'eval_metric': 'logloss',
@@ -453,15 +432,15 @@ def train_xgboost(X_train, y_train, X_test, y_test, focus_precision=True, verbos
         'verbosity': 0
     }
     
-    # Ajustar parâmetros se focus_precision=True (mais conservador = melhor precisão)
+    # Adjust parameters if focus_precision=True (more conservative = better precision)
     if focus_precision:
         params.update({
-            'min_child_weight': 7,  # Aumentado de 3 para 7 (mais conservador)
-            'gamma': 0.3,  # Aumentado de 0.1 para 0.3 (mais conservador)
-            'max_depth': 4,  # Reduzido de 6 para 4 (menos overfitting)
-            'learning_rate': 0.03,  # Reduzido de 0.1 para 0.03 (mais cuidadoso)
-            'reg_alpha': 0.2,  # Aumentada regularização L1
-            'reg_lambda': 2.0,  # Aumentada regularização L2
+            'min_child_weight': 7,  # Increased from 3 to 7 (more conservative)
+            'gamma': 0.3,  # Increased from 0.1 to 0.3 (more conservative)
+            'max_depth': 4,  # Reduced from 6 to 4 (less overfitting)
+            'learning_rate': 0.03,  # Reduced from 0.1 to 0.03 (more careful)
+            'reg_alpha': 0.2,  # Increased L1 regularization
+            'reg_lambda': 2.0,  # Increased L2 regularization
         })
     
     if verbose:
@@ -474,14 +453,14 @@ def train_xgboost(X_train, y_train, X_test, y_test, focus_precision=True, verbos
         print(f"  - early_stopping_rounds: 50")
         print(f"\nStarting training...")
     
-    # Criar DMatrix (formato otimizado do XGBoost)
+    # Create DMatrix (XGBoost optimized format)
     dtrain = xgb.DMatrix(X_train_array, label=y_train_array, feature_names=feature_names)
     dtest = xgb.DMatrix(X_test_array, label=y_test_array, feature_names=feature_names)
     
-    # Lista de conjuntos para avaliação durante treinamento
+    # List of sets for evaluation during training
     evallist = [(dtrain, 'train'), (dtest, 'test')]
     
-    # Treinar modelo com early stopping
+    # Train model with early stopping
     if verbose:
         print("  (Training in progress, this may take a few minutes...)")
     
@@ -499,63 +478,11 @@ def train_xgboost(X_train, y_train, X_test, y_test, focus_precision=True, verbos
         print(f"  - Best iteration: {model.best_iteration}")
         print(f"  - Best score (logloss): {model.best_score:.6f}")
     
-    # Se focus_precision=True, encontrar melhor threshold para maximizar precisão
-    optimal_threshold = 0.5
-    if focus_precision:
-        if verbose:
-            print(f"\nOptimizing threshold for maximum precision...")
-        
-        # Obter probabilidades do conjunto de validação
-        y_pred_proba = model.predict(dtest)
-        
-        # Testar diferentes thresholds com maior granularidade
-        # Primeiro, busca ampla
-        thresholds_coarse = np.arange(0.3, 0.95, 0.05)
-        best_precision = 0
-        best_threshold = 0.5
-        
-        for threshold in thresholds_coarse:
-            y_pred = (y_pred_proba >= threshold).astype(int)
-            if y_pred.sum() > 0:  # Evitar divisão por zero
-                prec = precision_score(y_test_array, y_pred, zero_division=0)
-                if prec > best_precision and prec > 0.5:  # Priorizar precisão >50%
-                    best_precision = prec
-                    best_threshold = threshold
-        
-        # Depois, busca fina ao redor do melhor threshold encontrado
-        if best_threshold > 0.3 and best_threshold < 0.9:
-            thresholds_fine = np.arange(max(0.3, best_threshold - 0.05), 
-                                       min(0.95, best_threshold + 0.05), 0.01)
-            for threshold in thresholds_fine:
-                y_pred = (y_pred_proba >= threshold).astype(int)
-                if y_pred.sum() > 0:
-                    prec = precision_score(y_test_array, y_pred, zero_division=0)
-                    if prec > best_precision:
-                        best_precision = prec
-                        best_threshold = threshold
-        
-        optimal_threshold = best_threshold
-        
-        if verbose:
-            print(f"  - Optimal threshold: {optimal_threshold:.3f}")
-            print(f"  - Precision at optimal threshold: {best_precision:.3f} ({best_precision*100:.1f}%)")
-            if best_precision > 0.5:
-                print(f"  ✓ Requirement met: Precision > 50%")
-            else:
-                print(f"  ⚠ Warning: Precision ({best_precision*100:.1f}%) is below 50% requirement")
-    else:
-        if verbose:
-            print(f"\nUsing default threshold: 0.5")
-    
-    if verbose:
-        print()
-    
-    # Capturar histórico de treinamento
+    # Capture training history
     training_history = {
         'best_iteration': model.best_iteration,
         'best_score': model.best_score,
         'scale_pos_weight': scale_pos_weight,
-        'optimal_threshold': optimal_threshold,
         'params': params
     }
     
@@ -564,24 +491,24 @@ def train_xgboost(X_train, y_train, X_test, y_test, focus_precision=True, verbos
 
 def evaluate_model(model, X_train, y_train, X_test, y_test, threshold=None, verbose=None):
     """
-    Avalia o modelo calculando métricas de performance.
+    Evaluates model by calculating performance metrics.
     
-    Métricas calculadas:
-    - Accuracy: Proporção de predições corretas
-    - Precision: Dos preditos como RED, quantos realmente são RED?
-    - Recall: Dos RED reais, quantos foram preditos?
+    Calculated metrics:
+    - Accuracy: Proportion of correct predictions
+    - Precision: Of those predicted as RED, how many are actually RED?
+    - Recall: Of the actual RED cases, how many were predicted?
     
-    Requisito do case: Focar em precisão >50%
+    Case requirement: Focus on precision >50%
     
     Args:
-        model: Modelo treinado (XGBoost Booster)
-        X_train, y_train: Dados de treino
-        X_test, y_test: Dados de teste
-        threshold: Threshold para classificação binária (default: 0.5)
-        verbose: Se True, mostra métricas calculadas (default: None, usa VERBOSE global)
+        model: Trained model (XGBoost Booster)
+        X_train, y_train: Training data
+        X_test, y_test: Test data
+        threshold: Threshold for binary classification (default: 0.5)
+        verbose: If True, shows calculated metrics (default: None, uses global VERBOSE)
         
     Returns:
-        Dict com métricas de treino e teste
+        Dict with training and test metrics
     """
     # Use global VERBOSE if verbose is None
     if verbose is None:
@@ -596,7 +523,7 @@ def evaluate_model(model, X_train, y_train, X_test, y_test, threshold=None, verb
         print("="*80)
         print(f"Classification threshold: {threshold}")
     
-    # Converter para arrays se necessário
+    # Convert to arrays if necessary
     if isinstance(X_train, pd.DataFrame):
         X_train_array = X_train.values
         X_test_array = X_test.values
@@ -614,29 +541,29 @@ def evaluate_model(model, X_train, y_train, X_test, y_test, threshold=None, verb
         y_train_array = y_train
         y_test_array = y_test
     
-    # Criar DMatrix para predições
+    # Create DMatrix for predictions
     dtrain = xgb.DMatrix(X_train_array, feature_names=feature_names)
     dtest = xgb.DMatrix(X_test_array, feature_names=feature_names)
     
-    # Obter probabilidades
+    # Get probabilities
     y_train_proba = model.predict(dtrain)
     y_test_proba = model.predict(dtest)
     
-    # Converter para predições binárias usando threshold
+    # Convert to binary predictions using threshold
     y_train_pred = (y_train_proba >= threshold).astype(int)
     y_test_pred = (y_test_proba >= threshold).astype(int)
     
-    # Calcular métricas para treino
+    # Calculate metrics for training
     train_accuracy = accuracy_score(y_train_array, y_train_pred)
     train_precision = precision_score(y_train_array, y_train_pred, zero_division=0)
     train_recall = recall_score(y_train_array, y_train_pred, zero_division=0)
     
-    # Calcular métricas para teste
+    # Calculate metrics for test
     test_accuracy = accuracy_score(y_test_array, y_test_pred)
     test_precision = precision_score(y_test_array, y_test_pred, zero_division=0)
     test_recall = recall_score(y_test_array, y_test_pred, zero_division=0)
     
-    # Criar dicionário com métricas
+    # Create dictionary with metrics
     metrics = {
         'train': {
             'accuracy': train_accuracy,
@@ -662,14 +589,14 @@ def evaluate_model(model, X_train, y_train, X_test, y_test, threshold=None, verb
         print(f"  - Precision: {test_precision:.4f} ({test_precision*100:.2f}%)")
         print(f"  - Recall:    {test_recall:.4f} ({test_recall*100:.2f}%)")
         
-        # Verificar requisito do case
+        # Check case requirement
         print(f"\nCase Requirement Check:")
         if test_precision > 0.5:
             print(f"  ✓ Precision ({test_precision*100:.2f}%) > 50% - REQUIREMENT MET")
         else:
             print(f"  ✗ Precision ({test_precision*100:.2f}%) ≤ 50% - REQUIREMENT NOT MET")
         
-        # Calcular diferenças (overfitting indicator)
+        # Calculate differences (overfitting indicator)
         accuracy_diff = train_accuracy - test_accuracy
         precision_diff = train_precision - test_precision
         recall_diff = train_recall - test_recall
@@ -691,41 +618,41 @@ def evaluate_model(model, X_train, y_train, X_test, y_test, threshold=None, verb
 
 def get_feature_importance(model, feature_names=None, top_n=15):
     """
-    Extrai e mostra as features mais importantes do modelo.
+    Extracts and shows the most important features of the model.
     
     Args:
-        model: Modelo XGBoost treinado (XGBoost Booster)
-        feature_names: Lista com nomes das features (opcional, se None tenta obter do modelo)
-        top_n: Número de top features para mostrar
+        model: Trained XGBoost model (XGBoost Booster)
+        feature_names: List of feature names (optional, if None tries to get from model)
+        top_n: Number of top features to show
         
     Returns:
-        DataFrame com features ordenadas por importância
+        DataFrame with features sorted by importance
     """
-    # Obter importância das features do modelo
+    # Get feature importance from model
     importance_dict = model.get_score(importance_type='weight')
     
-    # Se feature_names não fornecido, tentar obter do modelo
+    # If feature_names not provided, try to get from model
     if feature_names is None:
         try:
-            # Tentar obter feature names do modelo
+            # Try to get feature names from model
             booster = model.get_booster()
             feature_names = booster.feature_names
             if feature_names is None or len(feature_names) == 0:
-                # Se não conseguir, usar chaves do importance_dict
+                # If can't get, use keys from importance_dict
                 feature_names = list(importance_dict.keys())
         except:
-            # Se não conseguir, usar chaves do importance_dict
+            # If can't get, use keys from importance_dict
             feature_names = list(importance_dict.keys())
     
-    # Criar lista de (feature_name, importance)
+    # Create list of (feature_name, importance)
     importance_list = []
     
-    # Se temos feature_names, mapear para importance_dict
+    # If we have feature_names, map to importance_dict
     if len(feature_names) > 0:
         for i, feat_name in enumerate(feature_names):
-            # XGBoost pode usar nomes limpos (sem caracteres especiais) ou f0, f1, etc.
+            # XGBoost may use cleaned names (without special characters) or f0, f1, etc.
             feat_key_clean = str(feat_name).replace('[', '_').replace(']', '_').replace('<', '_').replace('>', '_')
-            # Tentar diferentes formatos de chave
+            # Try different key formats
             importance_value = (
                 importance_dict.get(feat_key_clean) or
                 importance_dict.get(feat_name) or
@@ -738,71 +665,72 @@ def get_feature_importance(model, feature_names=None, top_n=15):
                 'importance': importance_value
             })
     else:
-        # Se não temos feature_names, usar diretamente as chaves do importance_dict
+        # If we don't have feature_names, use keys from importance_dict directly
         for feat_key, importance_value in importance_dict.items():
             importance_list.append({
                 'feature': feat_key,
                 'importance': importance_value
             })
     
-    # Criar DataFrame
+    # Create DataFrame
     df_importance = pd.DataFrame(importance_list)
     
-    # Ordenar por importância (decrescente)
+    # Sort by importance (descending)
     df_importance = df_importance.sort_values('importance', ascending=False)
     
-    # Retornar apenas top_n se especificado
+    # Return only top_n if specified
     if top_n is not None and top_n > 0:
         df_importance = df_importance.head(top_n)
     
-    # Resetar índice
+    # Reset index
     df_importance = df_importance.reset_index(drop=True)
     
     return df_importance
 
 
-def check_overfitting(metrics):
+def check_overfitting(metrics, verbose=False):
     """
-    Verifica se há overfitting comparando performance em treino vs teste.
+    Checks for overfitting by comparing performance on training vs test sets.
     
-    Overfitting é detectado quando:
-    - Métricas de treino são significativamente melhores que de teste
-    - Diferença > 10% geralmente indica overfitting
+    Overfitting is detected when:
+    - Training metrics are significantly better than test metrics
+    - Difference > 10% usually indicates overfitting
     
     Args:
-        metrics: Dict com métricas de treino e teste (retornado por evaluate_model)
+        metrics: Dict with training and test metrics (returned by evaluate_model)
+        verbose: If True, prints detailed analysis
         
     Returns:
-        Dict com informações sobre overfitting
+        Dict with overfitting information
     """
     train_metrics = metrics.get('train', {})
     test_metrics = metrics.get('test', {})
     
-    # Calcular diferenças
+    # Calculate differences
     accuracy_diff = train_metrics.get('accuracy', 0) - test_metrics.get('accuracy', 0)
     precision_diff = train_metrics.get('precision', 0) - test_metrics.get('precision', 0)
     recall_diff = train_metrics.get('recall', 0) - test_metrics.get('recall', 0)
     
-    # Threshold para considerar overfitting (10%)
+    # Threshold to consider overfitting (10%)
     overfitting_threshold = 0.10
     
-    # Verificar se há overfitting
+    # Check if there is overfitting
     has_overfitting = (
         accuracy_diff > overfitting_threshold or
         abs(precision_diff) > overfitting_threshold or
         abs(recall_diff) > overfitting_threshold
     )
     
-    # Determinar severidade
-    severity = 'none'
+    # Determine severity
+    severity = 'Good (no overfitting)'
     if has_overfitting:
         max_diff = max(abs(accuracy_diff), abs(precision_diff), abs(recall_diff))
         if max_diff > 0.20:
-            severity = 'severe'
+            severity = 'Severe'
         elif max_diff > 0.15:
-            severity = 'moderate'
+            severity = 'Moderate'
         else:
-            severity = 'mild'
+            severity = 'Mild'
     
     overfitting_info = {
         'has_overfitting': has_overfitting,
@@ -815,42 +743,111 @@ def check_overfitting(metrics):
         'threshold': overfitting_threshold
     }
     
+    # Print analysis if verbose=True
+    if verbose:
+        print("="*80)
+        print("OVERFITTING ANALYSIS")
+        print("="*80)
+        print(f"\nOverfitting Status: {severity.upper()}")
+        if not has_overfitting:
+            print("✅ No overfitting detected - Model generalizes well!")
+        else:
+            print(f"⚠️  Overfitting detected ({severity} severity)")
+        
+        print(f"\nDifferences (Train - Test):")
+        print(f"  Accuracy:  {accuracy_diff*100:+.2f}%")
+        print(f"  Precision: {precision_diff*100:+.2f}%")
+        print(f"  Recall:    {recall_diff*100:+.2f}%")
+        print("="*80)
+    
     return overfitting_info
+
+
+def get_predictions(model, X, feature_names=None, threshold=0.5):
+    """
+    Helper function to make predictions with XGBoost model.
+    
+    This function encapsulates the prediction process, avoiding code duplication
+    in the notebook. Returns both probabilities and binary predictions.
+    
+    Args:
+        model: Trained XGBoost model (XGBoost Booster)
+        X: Features (DataFrame or numpy array)
+        feature_names: List of feature names (optional, if None tries to get from X)
+        threshold: Threshold for binary classification (default: 0.5)
+        
+    Returns:
+        y_pred_proba: Array with predicted probabilities (probability of class 1 = RED)
+        y_pred: Array with binary predictions (0 = GOOD, 1 = RED)
+    """
+    # Convert to arrays if necessary
+    if isinstance(X, pd.DataFrame):
+        X_array = X.values
+        if feature_names is None:
+            # Clean feature names (XGBoost doesn't accept [, ], <, etc)
+            feature_names = [str(col).replace('[', '_').replace(']', '_').replace('<', '_').replace('>', '_') 
+                            for col in X.columns]
+    else:
+        X_array = X
+        # If feature_names not provided and X is not DataFrame, try to get from model
+        if feature_names is None:
+            try:
+                feature_names = model.feature_names
+            except:
+                feature_names = None
+    
+    # Clean feature names if provided
+    if feature_names is not None:
+        feature_names_clean = [str(feat).replace('[', '_').replace(']', '_').replace('<', '_').replace('>', '_') 
+                              for feat in feature_names]
+    else:
+        feature_names_clean = None
+    
+    # Create DMatrix for predictions
+    dtest = xgb.DMatrix(X_array, feature_names=feature_names_clean)
+    
+    # Get probabilities
+    y_pred_proba = model.predict(dtest)
+    
+    # Convert to binary predictions using threshold
+    y_pred = (y_pred_proba >= threshold).astype(int)
+    
+    return y_pred_proba, y_pred
 
 
 def save_processed_data(df, output_path='data/processed/cleaned_data.csv', verbose=None):
     """
-    Salva dados processados em arquivo CSV.
+    Saves processed data to CSV file.
     
-    Útil para evitar reprocessar dados grandes toda vez que rodar o notebook.
+    Useful to avoid reprocessing large data every time the notebook is run.
     
     Args:
-        df: DataFrame processado
-        output_path: Caminho para salvar (default: 'data/processed/cleaned_data.csv')
-        verbose: Se True, mostra mensagens (default: None, usa VERBOSE global)
+        df: Processed DataFrame
+        output_path: Path to save (default: 'data/processed/cleaned_data.csv')
+        verbose: If True, shows messages (default: None, uses global VERBOSE)
         
     Returns:
-        Caminho do arquivo salvo
+        Path of saved file
     """
     import os
     
     if verbose is None:
         verbose = VERBOSE
     
-    # Criar diretório se não existir
+    # Create directory if it doesn't exist
     output_dir = os.path.dirname(output_path)
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
         if verbose:
             print(f"Created directory: {output_dir}")
     
-    # Salvar CSV (usar mesmo separador do arquivo original: ';')
+    # Save CSV (use same separator as original file: ';')
     df.to_csv(output_path, index=False, sep=';')
     
     if verbose:
-        print(f"✓ Dados processados salvos em: {output_path}")
+        print(f"✓ Processed data saved to: {output_path}")
         print(f"  Shape: {df.shape}")
         file_size = os.path.getsize(output_path) / (1024 * 1024)  # MB
-        print(f"  Tamanho do arquivo: {file_size:.2f} MB")
+        print(f"  File size: {file_size:.2f} MB")
     
     return output_path
