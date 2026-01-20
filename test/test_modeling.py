@@ -1127,7 +1127,7 @@ class TestCheckOverfitting:
         }
         overfitting_info = check_overfitting(metrics)
         
-        valid_severities = ['none', 'mild', 'moderate', 'severe']
+        valid_severities = ['Good (no overfitting)', 'Mild', 'Moderate', 'Severe']
         assert overfitting_info['severity'] in valid_severities, \
             f"Severity should be one of {valid_severities}, got {overfitting_info['severity']}"
     
@@ -1141,8 +1141,8 @@ class TestCheckOverfitting:
         overfitting_info = check_overfitting(similar_metrics)
         assert not overfitting_info['has_overfitting'], \
             "Should not detect overfitting when metrics are similar"
-        assert overfitting_info['severity'] == 'none', \
-            "Severity should be 'none' when no overfitting"
+        assert overfitting_info['severity'] == 'Good (no overfitting)', \
+            "Severity should be 'Good (no overfitting)' when no overfitting"
     
     def test_detects_overfitting_when_large_difference(self):
         """Test that overfitting is detected when there's large difference"""
